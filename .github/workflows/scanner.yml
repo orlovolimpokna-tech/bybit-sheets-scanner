@@ -1,0 +1,32 @@
+name: Bybit Sheets Scanner
+
+on:
+  schedule:
+    # Запуск каждые 15 минут
+    - cron: '*/15 * * * *'
+  # Кнопка для ручного запуска в интерфейсе GitHub
+  workflow_dispatch:
+
+jobs:
+  run-scanner:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Проверка репозитория
+        uses: actions/checkout@v4
+
+      - name: Установка Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Установка зависимостей
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests pandas
+
+      - name: Запуск сканера Bybit
+        env:
+          GOOGLE_WEBHOOK_URL: ${{ secrets.GOOGLE_WEBHOOK_URL }}
+        run: python scanner.py
