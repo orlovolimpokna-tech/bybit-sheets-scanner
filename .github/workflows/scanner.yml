@@ -2,9 +2,9 @@ name: Bybit Sheets Scanner
 
 on:
   schedule:
-    # Запуск каждые 15 минут
+    # Запуск каждые 15 минут в фоновом режиме
     - cron: '*/15 * * * *'
-  # Кнопка для ручного запуска в интерфейсе GitHub
+  # Кнопка для ручного запуска
   workflow_dispatch:
 
 jobs:
@@ -19,7 +19,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
 
       - name: Установка зависимостей
         run: |
