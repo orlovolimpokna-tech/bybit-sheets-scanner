@@ -2,9 +2,7 @@ name: Bybit Sheets Scanner
 
 on:
   schedule:
-    # Запуск каждые 15 минут в фоновом режиме
     - cron: '*/15 * * * *'
-  # Кнопка для ручного запуска
   workflow_dispatch:
 
 jobs:
@@ -28,4 +26,4 @@ jobs:
       - name: Запуск сканера Bybit
         env:
           GOOGLE_WEBHOOK_URL: ${{ secrets.GOOGLE_WEBHOOK_URL }}
-       run: python -u .github/workflows/scanner.py
+        run: python -u .github/workflows/scanner.py
