@@ -28,4 +28,4 @@ jobs:
       - name: Запуск сканера Bybit
         env:
           GOOGLE_WEBHOOK_URL: ${{ secrets.GOOGLE_WEBHOOK_URL }}
-        run: python scanner.py
+        run: python .github/workflows/scanner.py
