@@ -5,7 +5,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 # Считываем URL веб-хука из переменной окружения
-GOOGLE_WEBHOOK_URL = os.getenv("GOOGLE_WEBHOOK_URL")
+GOOGLE_WEBHOOK_URL = os.getenv("https://script.google.com/macros/s/AKfycbyNrvatN05O2f6roz-xSDe9PnwAvKC3AGx7JuQgAqI8b8D9p3dw9TQJj6RTTFlAQ5Dr/exec")
 
 MIN_TURNOVER_24H = 1_000_000  # Фильтр монет с объемом от $1M
 FUNDING_LIMIT = 0.0004        # Порог перегрева фандинга: > 0.04%
