@@ -212,13 +212,7 @@ def main():
     except Exception as e:
         print(f"Ошибка при отправке запроса: {e}")
 
+# СТАЛО (выполняет расчет 1 раз и сразу завершается):
 if __name__ == "__main__":
-    while True:
-        try:
-            print(f"\n--- Запуск сканирования рынка: {time.strftime('%Y-%m-%d %H:%M:%S')} ---")
-            main()
-        except Exception as err:
-            print(f"Критический сбой в основном цикле: {err}")
-        
-        print("Пауза 15 минут до следующего обновления...")
-        time.sleep(900)
+    print(f"[{time.strftime('%H:%M:%S')}] Старт сканирования рынка...")
+    main()
