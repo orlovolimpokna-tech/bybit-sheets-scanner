@@ -4,11 +4,11 @@ import pandas as pd
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-# Считываем защищенный URL из секретов GitHub
+# Считываем URL веб-хука из переменной окружения
 GOOGLE_WEBHOOK_URL = os.getenv("GOOGLE_WEBHOOK_URL")
 
-MIN_TURNOVER_24H = 1_000_000
-FUNDING_LIMIT = 0.0004 # 0.04%
+MIN_TURNOVER_24H = 1_000_000  # Фильтр монет с объемом от $1M
+FUNDING_LIMIT = 0.0004        # Порог перегрева фандинга: > 0.04%
 
 def get_bybit_tickers():
     url = "https://api.bybit.com/v5/market/tickers?category=linear"
@@ -22,7 +22,7 @@ def get_bybit_tickers():
             tickers.sort(key=lambda x: float(x.get("turnover24h", 0)), reverse=True)
             return tickers
     except Exception as e:
-        print("Ошибка загрузки тикеров:", e)
+        print(f"Ошибка загрузки тикеров: {e}")
     return []
 
 def get_klines_1d(symbol, limit=200):
@@ -88,7 +88,7 @@ def process_coin(t):
         if len(klines) < 30:
             return None
 
-        # Кластер 2: RSI за 6 месяцев
+        # Кластер 2: RSI за 6 месяцев и расчет 5 зон
         closes = pd.Series([k["close"] for k in klines])
         rsi_series = calculate_rsi_series(closes, 14)
         rsi_6m = rsi_series.iloc[-180:].dropna()
@@ -99,7 +99,7 @@ def process_coin(t):
         min_rsi = round(rsi_6m.min(), 1)
         max_rsi = round(rsi_6m.max(), 1)
 
-        # Расчет градации РЕЗ1
+        # Градация РЕЗ1 = (Макс - Мин) / 6
         rez1 = (max_rsi - min_rsi) / 6.0
         if curr_rsi < min_rsi + rez1:
             rsi_zone = "полная перепроданность"
@@ -112,17 +112,17 @@ def process_coin(t):
         else:
             rsi_zone = "полная перекупленность"
 
-        # Кластер 4: SFP и Funding
+        # Кластер 4: SFP и Funding Rate
         prev_k, curr_k = klines[-2], klines[-1]
         is_sfp = curr_k["high"] > prev_k["high"] and curr_k["close"] < prev_k["high"] and curr_k["close"] < curr_k["open"]
         funding_str = f"{funding * 100:.4f}%"
 
-        # Кластер 6: OI и отклонение
+        # Кластер 6: OI и отклонение от 30-дневного среднего
         avg_oi_coins = get_avg_oi_30d(sym)
         avg_oi_usd = avg_oi_coins * price
         oi_diff_pct = ((oi_curr - avg_oi_usd) / avg_oi_usd * 100) if avg_oi_usd > 0 else 0
 
-        # Кластер 8: Дивергенции
+        # Кластер 8: Дивергенции RSI
         is_bear_div = "нет"
         is_bull_div = "нет"
         if len(rsi_series) >= 6:
@@ -142,16 +142,14 @@ def process_coin(t):
         if len(macd) >= 2 and (macd.iloc[-2] >= signal.iloc[-2]) and (macd.iloc[-1] < signal.iloc[-1]) and (macd.iloc[-1] > 0):
             macd_bear_cross = "ДА 🔴"
 
-        # Обороты (месячные)
-        avg_vol_30d = turnover_24h * 0.88 # Базовая оценка суточного тренда
+        avg_vol_30d = turnover_24h * 0.88
         vol_diff_pct = ((turnover_24h - avg_vol_30d) / avg_vol_30d * 100) if avg_vol_30d > 0 else 0
 
-        # Ликвидации
         liq_curr = turnover_24h * 0.015
         avg_liq_30d = liq_curr * 0.75
         liq_diff_pct = ((liq_curr - avg_liq_30d) / avg_liq_30d * 100) if avg_liq_30d > 0 else 0
 
-        # Кластер 11: ИТОГОВЫЙ СИГНАЛ
+        # Кластер 11: Итоговый торговый сигнал
         if rsi_zone == "полная перекупленность" and funding > FUNDING_LIMIT and "ДА" in is_bear_div:
             final_signal = "Встаём в шорт 🔴"
         else:
@@ -177,22 +175,23 @@ def format_usd(val):
 
 def main():
     if not GOOGLE_WEBHOOK_URL:
-        print("Ошибка: GOOGLE_WEBHOOK_URL не найден в переменных окружения.")
+        print("Ошибка: GOOGLE_WEBHOOK_URL не задан в переменных окружения.")
         return
 
-    print("Запрос тикеров Bybit...")
+    print("Запрос котировок Bybit...")
     tickers = get_bybit_tickers()
     if not tickers:
+        print("Список тикеров пуст.")
         return
 
-    print(f"Анализ {len(tickers)} инструментов в 20 потоков...")
+    print(f"Анализ {len(tickers)} пар в 20 параллельных потоков...")
     rows = []
     with ThreadPoolExecutor(max_workers=20) as executor:
         for r in executor.map(process_coin, tickers):
             if r:
                 rows.append(r)
 
-    # Приоритет строкам с сигналом на шорт
+    # Строки с сигналом шорта поднимаем наверх таблицы
     rows.sort(key=lambda x: 0 if "шорт" in x[-1] else 1)
 
     headers = [
@@ -207,8 +206,19 @@ def main():
     ]
 
     print(f"Отправка {len(rows)} строк в Google Таблицу...")
-    resp = requests.post(GOOGLE_WEBHOOK_URL, json={"headers": headers, "rows": rows}, timeout=30)
-    print("Ответ Google Sheets:", resp.text)
+    try:
+        resp = requests.post(GOOGLE_WEBHOOK_URL, json={"headers": headers, "rows": rows}, timeout=30)
+        print("Ответ сервера Google Sheets:", resp.text)
+    except Exception as e:
+        print(f"Ошибка при отправке запроса: {e}")
 
 if __name__ == "__main__":
-    main()
+    while True:
+        try:
+            print(f"\n--- Запуск сканирования рынка: {time.strftime('%Y-%m-%d %H:%M:%S')} ---")
+            main()
+        except Exception as err:
+            print(f"Критический сбой в основном цикле: {err}")
+        
+        print("Пауза 15 минут до следующего обновления...")
+        time.sleep(900)
